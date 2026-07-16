@@ -46,7 +46,25 @@ Email Report
 ```
 
 ---
+---
 
+## 📸 Screenshots
+
+### Security Incident Intake Form
+
+![Incident Form](incident-form.png)
+
+### n8n Workflow
+
+![Workflow](workflow.png)
+
+### Generated Security Report
+
+![Security Report](security-report-1.png)
+
+![Security Report](security-report-2.png)
+
+---
 ## 🛠️ Technologies Used
 
 - n8n
