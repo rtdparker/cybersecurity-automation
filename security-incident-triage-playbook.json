@@ -1,0 +1,424 @@
+{
+  "name": "Security Incident Triage & Response Playbook",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "6a689ccd-1f6b-4f07-95ae-6f2a56c2d8a9",
+        "formTitle": "Security Incident Intake Form",
+        "formDescription": "Report a security incident for automated triage and response.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Client Name",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Company",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Email",
+              "fieldType": "email",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Affected Asset",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Urgency",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "High"
+                  },
+                  {
+                    "option": "Medium"
+                  },
+                  {
+                    "option": "Low"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Description",
+              "fieldType": "textarea",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Incident Type",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Ransomware"
+                  },
+                  {
+                    "option": "Data Breach"
+                  },
+                  {
+                    "option": "Malware Infection"
+                  },
+                  {
+                    "option": "Business Email Compromise"
+                  },
+                  {
+                    "option": "Web Application Attack"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "aa29e5e0-5f4d-4b12-9390-d7fa941f5133",
+      "name": "Form Trigger",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "6a689ccd-1f6b-4f07-95ae-6f2a56c2d8a9"
+    },
+    {
+      "parameters": {
+        "jsCode": "// NODE 2: Validation & Enrichment\n\nconst item = $input.first().json;\n\n// Only validate the fields that actually exist in your form\nconst required = [\n  'Client Name',\n  'Company',\n  'Email',\n  'Incident Type',\n  'Affected Asset',\n  'Urgency',\n  'Description'\n];\n\nfor (const field of required) {\n  if (!item[field] || item[field].toString().trim() === '') {\n    throw new Error(`Validation failed: Missing required field \"${field}\".`);\n  }\n}\n\n// Validate email\nconst emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\nif (!emailRegex.test(item['Email'])) {\n  throw new Error('Validation failed: Invalid email format.');\n}\n\nconst now = new Date();\nconst incidentId = `INC-${now.getTime().toString(36).toUpperCase()}`;\n\nreturn [{\n  json: {\n    ...item,\n\n    'Incident ID': incidentId,\n    'Timestamp': now.toISOString(),\n    'Current Date': now.toDateString(),\n    'Analyst': 'Automated SOC',\n\n    'Client Name': item['Client Name'].trim(),\n    'Company': item['Company'].trim(),\n    'Email': item['Email'].trim(),\n    'Incident Type': item['Incident Type'].trim(),\n    'Affected Asset': item['Affected Asset'].trim(),\n    'Urgency': item['Urgency'].toUpperCase(),\n    'Description': item['Description'].trim()\n  }\n}];"
+      },
+      "id": "28faed9f-cab0-4645-8bad-4eadeb1d433e",
+      "name": "Validate & Enrich",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// NODE 3: SOC Knowledge Base & Triage Logic\nconst item = $input.first().json;\n\nconst playbooks = {\n  \"Ransomware\": { severity: \"Critical\", riskScore: 95, mitreTechnique: \"T1486\", mitreTactic: \"Impact\", cvss: 9.8, businessImpact: \"Severe operational disruption and financial loss.\", likelihood: \"High\", containment: \"Isolate affected hosts; Disable network shares.\", eradication: \"Remove malware; Patch vulnerabilities.\", recovery: \"Restore from clean backups; Verify integrity.\", evidence: \"Memory dumps; Disk images; Network logs.\", logs: \"EDR logs; Firewall logs; Backup logs.\", notifications: \"CISO; Legal; Cyber Insurance.\", escalation: \"Executive & Board\", compliance: \"GDPR, CCPA\", execSummary: \"Ransomware detected. Immediate containment required.\", techSummary: \"Encryption routine identified. C2 communication blocked.\" },\n  \"Phishing\": { severity: \"High\", riskScore: 75, mitreTechnique: \"T1566\", mitreTactic: \"Initial Access\", cvss: 7.5, businessImpact: \"Credential compromise and data exfiltration.\", likelihood: \"High\", containment: \"Block sender; Reset compromised passwords.\", eradication: \"Delete malicious emails; Scan endpoints.\", recovery: \"User training; Enforce MFA.\", evidence: \"Email headers; Attachments; URLs.\", logs: \"Email gateway; EDR; Proxy logs.\", notifications: \"IT Security; Affected Users.\", escalation: \"SOC Manager\", compliance: \"NIST, ISO27001\", execSummary: \"Phishing campaign targeting employees.\", techSummary: \"Malicious payload identified in attachment.\" },\n  \"Malware\": { severity: \"High\", riskScore: 80, mitreTechnique: \"T1204\", mitreTactic: \"Execution\", cvss: 8.2, businessImpact: \"System degradation and data theft.\", likelihood: \"High\", containment: \"Quarantine infected files; Block C2 IPs.\", eradication: \"Run AV scans; Remove persistence mechanisms.\", recovery: \"Reimage affected systems.\", evidence: \"Malware samples; Process logs.\", logs: \"EDR; AV logs; Sysmon.\", notifications: \"IT Security; System Owners.\", escalation: \"SOC Manager\", compliance: \"NIST\", execSummary: \"Malware infection detected on endpoint.\", techSummary: \"Suspicious process execution identified.\" },\n  \"Data Breach\": { severity: \"Critical\", riskScore: 98, mitreTechnique: \"T1041\", mitreTactic: \"Exfiltration\", cvss: 9.9, businessImpact: \"Regulatory fines and reputational damage.\", likelihood: \"Medium\", containment: \"Revoke access; Isolate data stores.\", eradication: \"Identify and close exfiltration vectors.\", recovery: \"Notify affected parties; Legal review.\", evidence: \"DLP logs; Database audit logs.\", logs: \"Database; Network; Cloud logs.\", notifications: \"CISO; Legal; PR; Regulators.\", escalation: \"Executive & Board\", compliance: \"GDPR, CCPA, HIPAA\", execSummary: \"Unauthorized data exfiltration confirmed.\", techSummary: \"Large volume of data transferred to external IP.\" },\n  \"Credential Theft\": { severity: \"High\", riskScore: 85, mitreTechnique: \"T1556\", mitreTactic: \"Credential Access\", cvss: 8.5, businessImpact: \"Unauthorized access to critical systems.\", likelihood: \"High\", containment: \"Force password reset; Revoke sessions.\", eradication: \"Remove malware; Patch auth systems.\", recovery: \"Implement MFA; Monitor for misuse.\", evidence: \"Auth logs; Keylogger traces.\", logs: \"Active Directory; Okta; EDR.\", notifications: \"IT Security; Affected Users.\", escalation: \"SOC Manager\", compliance: \"NIST, ISO27001\", execSummary: \"User credentials compromised.\", techSummary: \"Brute force and credential stuffing detected.\" },\n  \"DDoS\": { severity: \"High\", riskScore: 88, mitreTechnique: \"T1498\", mitreTactic: \"Impact\", cvss: 8.8, businessImpact: \"Service unavailability and revenue loss.\", likelihood: \"Medium\", containment: \"Enable DDoS mitigation; Rate limiting.\", eradication: \"Block attacking IPs; Blackhole routing.\", recovery: \"Restore normal traffic flow.\", evidence: \"Network flow logs; Firewall logs.\", logs: \"WAF; Router; ISP logs.\", notifications: \"Network Team; ISP; CISO.\", escalation: \"SOC Manager\", compliance: \"SLA\", execSummary: \"Distributed Denial of Service attack in progress.\", techSummary: \"Volumetric traffic spike detected.\" },\n  \"Insider Threat\": { severity: \"Critical\", riskScore: 92, mitreTechnique: \"T1078\", mitreTactic: \"Defense Evasion\", cvss: 9.0, businessImpact: \"Data theft and internal sabotage.\", likelihood: \"Low\", containment: \"Disable user account; Revoke access.\", eradication: \"Investigate scope; Remove unauthorized tools.\", recovery: \"Disciplinary action; Policy review.\", evidence: \"User activity logs; File access logs.\", logs: \"DLP; HR; Endpoint logs.\", notifications: \"HR; Legal; CISO.\", escalation: \"Executive & Board\", compliance: \"SOX, GDPR\", execSummary: \"Malicious insider activity detected.\", techSummary: \"Abnormal data access patterns by privileged user.\" },\n  \"Privilege Escalation\": { severity: \"Critical\", riskScore: 90, mitreTechnique: \"T1068\", mitreTactic: \"Privilege Escalation\", cvss: 9.2, businessImpact: \"Full system compromise.\", likelihood: \"Medium\", containment: \"Isolate system; Revoke elevated tokens.\", eradication: \"Patch vulnerability; Remove backdoors.\", recovery: \"Audit permissions; Reimage if needed.\", evidence: \"Exploit artifacts; Auth logs.\", logs: \"Sysmon; Windows Event; EDR.\", notifications: \"IT Security; System Admins.\", escalation: \"SOC Manager\", compliance: \"NIST\", execSummary: \"Unauthorized privilege escalation detected.\", techSummary: \"Local exploit used to gain SYSTEM access.\" },\n  \"Web Defacement\": { severity: \"Medium\", riskScore: 65, mitreTechnique: \"T1491\", mitreTactic: \"Impact\", cvss: 6.5, businessImpact: \"Reputational damage and loss of trust.\", likelihood: \"Medium\", containment: \"Take site offline; Restore from backup.\", eradication: \"Patch CMS; Remove web shells.\", recovery: \"Restore clean version; Harden WAF.\", evidence: \"Web server logs; Modified files.\", logs: \"Apache/Nginx; WAF; CMS logs.\", notifications: \"Web Team; PR; CISO.\", escalation: \"SOC Manager\", compliance: \"PCI-DSS\", execSummary: \"Public website defaced by attacker.\", techSummary: \"Unauthorized file modification on web root.\" },\n  \"Lost Device\": { severity: \"Medium\", riskScore: 60, mitreTechnique: \"T1078\", mitreTactic: \"Initial Access\", cvss: 6.0, businessImpact: \"Potential data exposure.\", likelihood: \"High\", containment: \"Remote wipe; Revoke certificates.\", eradication: \"N/A (Physical loss).\", recovery: \"Issue replacement device.\", evidence: \"MDM logs; Last known location.\", logs: \"MDM; VPN; Auth logs.\", notifications: \"IT Support; User; Security.\", escalation: \"IT Manager\", compliance: \"GDPR, HIPAA\", execSummary: \"Corporate device reported lost or stolen.\", techSummary: \"Device offline and unresponsive to MDM.\" },\n  \"Business Email Compromise\": { severity: \"Critical\", riskScore: 94, mitreTechnique: \"T1566.002\", mitreTactic: \"Initial Access\", cvss: 9.5, businessImpact: \"Significant financial fraud.\", likelihood: \"Medium\", containment: \"Recall emails; Freeze bank transfers.\", eradication: \"Reset credentials; Audit forwarding rules.\", recovery: \"Contact bank; Law enforcement.\", evidence: \"Email logs; Financial records.\", logs: \"Email gateway; Banking logs.\", notifications: \"Finance; Legal; CISO; FBI.\", escalation: \"Executive & Board\", compliance: \"SOX, GDPR\", execSummary: \"Executive email compromised for wire fraud.\", techSummary: \"Unauthorized email forwarding rule created.\" },\n  \"SQL Injection\": { severity: \"High\", riskScore: 82, mitreTechnique: \"T1190\", mitreTactic: \"Initial Access\", cvss: 8.6, businessImpact: \"Database compromise and data theft.\", likelihood: \"Medium\", containment: \"Block attacking IP; Disable vulnerable endpoint.\", eradication: \"Patch code; Implement parameterized queries.\", recovery: \"Audit database; Notify if data stolen.\", evidence: \"Web logs; Database query logs.\", logs: \"WAF; Web server; DB logs.\", notifications: \"Dev Team; DBA; CISO.\", escalation: \"SOC Manager\", compliance: \"OWASP, PCI-DSS\", execSummary: \"SQL Injection attack against web application.\", techSummary: \"Malicious SQL payload detected in HTTP request.\" },\n  \"Brute Force\": { severity: \"Medium\", riskScore: 55, mitreTechnique: \"T1110\", mitreTactic: \"Credential Access\", cvss: 5.5, businessImpact: \"Account lockouts and potential access.\", likelihood: \"High\", containment: \"Block source IP; Enforce account lockout.\", eradication: \"Reset compromised passwords.\", recovery: \"Implement MFA; Rate limiting.\", evidence: \"Auth logs; Failed login attempts.\", logs: \"Active Directory; VPN; SSH logs.\", notifications: \"IT Security; System Admins.\", escalation: \"SOC Analyst\", compliance: \"NIST\", execSummary: \"Brute force attack against authentication service.\", techSummary: \"High volume of failed login attempts detected.\" },\n  \"Suspicious Login\": { severity: \"Medium\", riskScore: 50, mitreTechnique: \"T1078\", mitreTactic: \"Defense Evasion\", cvss: 5.0, businessImpact: \"Potential unauthorized access.\", likelihood: \"Medium\", containment: \"Force MFA challenge; Revoke session.\", eradication: \"Investigate user activity.\", recovery: \"User verification; Password reset.\", evidence: \"Login metadata; GeoIP logs.\", logs: \"IdP; VPN; Application logs.\", notifications: \"IT Security; User.\", escalation: \"SOC Analyst\", compliance: \"NIST\", execSummary: \"Anomalous login behavior detected.\", techSummary: \"Login from unusual location or device.\" },\n  \"Command and Control\": { severity: \"Critical\", riskScore: 96, mitreTechnique: \"T1071\", mitreTactic: \"Command and Control\", cvss: 9.6, businessImpact: \"Full remote control of assets.\", likelihood: \"Low\", containment: \"Block C2 domains; Isolate hosts.\", eradication: \"Remove malware; Patch vulnerabilities.\", recovery: \"Reimage systems; Threat hunt.\", evidence: \"Network traffic; Process trees.\", logs: \"Firewall; DNS; EDR; Proxy.\", notifications: \"CISO; Threat Intel Team.\", escalation: \"Executive & Board\", compliance: \"NIST, ISO27001\", execSummary: \"Active Command and Control communication detected.\", techSummary: \"Beaconing traffic to known malicious IP.\" },\n  \"Unauthorized Access\": { severity: \"High\", riskScore: 78, mitreTechnique: \"T1078\", mitreTactic: \"Persistence\", cvss: 7.8, businessImpact: \"Data exposure and system compromise.\", likelihood: \"Medium\", containment: \"Disable account; Revoke tokens.\", eradication: \"Audit access; Remove backdoors.\", recovery: \"Review permissions; Enhance monitoring.\", evidence: \"Auth logs; Access logs.\", logs: \"IAM; VPN; Application logs.\", notifications: \"IT Security; System Owners.\", escalation: \"SOC Manager\", compliance: \"NIST, SOX\", execSummary: \"Unauthorized access to critical system detected.\", techSummary: \"User accessed resources outside their role.\" }\n};\n\nconst playbook = playbooks[item['Incident Type']] || playbooks['Malware'];\n\n// Deterministic Priority Calculation\nlet priority = 'Low';\nconst risk = playbook.riskScore;\nconst urgency = item['Urgency'];\n\nif (urgency === 'CRITICAL' || risk >= 90) priority = 'Critical';\nelse if (urgency === 'HIGH' || risk >= 70) priority = 'High';\nelse if (urgency === 'MEDIUM' || risk >= 40) priority = 'Medium';\nelse priority = 'Low';\n\nreturn [{\n  json: {\n    ...item,\n    ...playbook,\n    'Priority': priority,\n    'Status': 'Triage Complete'\n  }\n}];"
+      },
+      "id": "bde2cf12-df33-4470-9571-eb11ebf6400c",
+      "name": "SOC Knowledge Base",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1rQLrPJU3vvoPJWlXzz7EAuEntsPBpAl6ubJtD-K99Y8",
+          "mode": "list",
+          "cachedResultName": "Security Incident Triage & Response Assistant",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1rQLrPJU3vvoPJWlXzz7EAuEntsPBpAl6ubJtD-K99Y8/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1rQLrPJU3vvoPJWlXzz7EAuEntsPBpAl6ubJtD-K99Y8/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Incident ID": "={{ $json[\"Incident ID\"] }}",
+            "Timestamp": "={{ $json.Timestamp }}",
+            "Client": "={{ $json[\"Client Name\"] }}",
+            "Company": "={{ $json.Company }}",
+            "Email": "={{ $json.Email }}",
+            "Incident Type": "={{ $json[\"Incident Type\"] }}",
+            "Affected Asset": "={{ $json[\"Affected Asset\"] }}",
+            "Severity": "={{ $json.severity }}",
+            "Risk Score": "={{ $json.riskScore }}",
+            "MITRE Technique": "={{ $json.mitreTechnique }}",
+            "Business Impact": "={{ $json.businessImpact }}",
+            "Status": "={{ $json.Status }}",
+            "Priority": "={{ $json.Priority }}",
+            "Urgency": "={{ $json.Urgency }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Incident ID",
+              "displayName": "Incident ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Timestamp",
+              "displayName": "Timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Client",
+              "displayName": "Client",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Company",
+              "displayName": "Company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Incident Type",
+              "displayName": "Incident Type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Affected Asset",
+              "displayName": "Affected Asset",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Severity",
+              "displayName": "Severity",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Risk Score",
+              "displayName": "Risk Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Priority",
+              "displayName": "Priority",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "MITRE Technique",
+              "displayName": "MITRE Technique",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Urgency",
+              "displayName": "Urgency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Business Impact",
+              "displayName": "Business Impact",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "c8a1188d-256d-494a-a124-f4d384b1cecf",
+      "name": "Log to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.1,
+      "position": [
+        608,
+        0
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "kXXUDru4OOh5Y32Q",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// NODE 5 - Build HTML Report\n\nconst d = $input.first().json;\n\nfunction badgeColor(severity) {\n  switch ((severity || \"\").toLowerCase()) {\n    case \"critical\":\n      return \"#dc3545\";\n    case \"high\":\n      return \"#fd7e14\";\n    case \"medium\":\n      return \"#ffc107\";\n    default:\n      return \"#28a745\";\n  }\n}\n\nconst html = `\n<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"UTF-8\">\n\n<style>\n\nbody{\nfont-family:Arial,Helvetica,sans-serif;\nbackground:#f4f7fb;\nmargin:0;\npadding:40px;\ncolor:#333;\n}\n\n.container{\nmax-width:900px;\nmargin:auto;\nbackground:white;\nborder-radius:10px;\noverflow:hidden;\nbox-shadow:0 5px 18px rgba(0,0,0,.12);\n}\n\n.header{\nbackground:#0b3d91;\ncolor:white;\npadding:30px;\n}\n\n.header h1{\nmargin:0;\nfont-size:30px;\n}\n\n.header p{\nmargin-top:8px;\nopacity:.9;\n}\n\n.section{\npadding:25px 35px;\nborder-bottom:1px solid #ececec;\n}\n\n.section h2{\nmargin-top:0;\ncolor:#0b3d91;\nborder-left:6px solid #0b3d91;\npadding-left:10px;\n}\n\ntable{\nwidth:100%;\nborder-collapse:collapse;\nmargin-top:15px;\n}\n\nth{\nbackground:#0b3d91;\ncolor:white;\npadding:12px;\ntext-align:left;\n}\n\ntd{\npadding:12px;\nborder:1px solid #ddd;\n}\n\n.badge{\ndisplay:inline-block;\npadding:6px 14px;\nborder-radius:20px;\ncolor:white;\nfont-weight:bold;\n}\n\n.score{\nfont-size:40px;\nfont-weight:bold;\ncolor:${badgeColor(d.Severity)};\n}\n\n.summary{\nbackground:#eef5ff;\nborder-left:5px solid #0b3d91;\npadding:18px;\nline-height:1.7;\nmargin-top:15px;\n}\n\n.footer{\npadding:20px;\nbackground:#f7f7f7;\ntext-align:center;\nfont-size:12px;\ncolor:#666;\n}\n\n</style>\n\n</head>\n\n<body>\n\n<div class=\"container\">\n\n<div class=\"header\">\n<h1>Security Incident Response Report</h1>\n<p>Incident ID: <strong>${d[\"Incident ID\"]}</strong></p>\n<p>Status: <strong>${d.Status}</strong></p>\n</div>\n\n<div class=\"section\">\n\n<h2>Client Information</h2>\n\n<table>\n\n<tr>\n<th>Client</th>\n<td>${d.Client}</td>\n\n<th>Company</th>\n<td>${d.Company}</td>\n</tr>\n\n<tr>\n<th>Email</th>\n<td colspan=\"3\">${d.Email}</td>\n</tr>\n\n<tr>\n<th>Date & Time</th>\n<td colspan=\"3\">${d.Timestamp}</td>\n</tr>\n\n</table>\n\n</div>\n\n<div class=\"section\">\n\n<h2>Incident Overview</h2>\n\n<table>\n\n<tr>\n<th>Incident Type</th>\n<td>${d[\"Incident Type\"]}</td>\n\n<th>Affected Asset</th>\n<td>${d[\"Affected Asset\"]}</td>\n</tr>\n\n<tr>\n<th>Severity</th>\n<td>\n<span class=\"badge\" style=\"background:${badgeColor(d.Severity)};\">\n${d.Severity}\n</span>\n</td>\n\n<th>Priority</th>\n<td>\n<span class=\"badge\" style=\"background:${badgeColor(d.Priority)};\">\n${d.Priority}\n</span>\n</td>\n\n</tr>\n\n<tr>\n<th>Risk Score</th>\n<td>${d[\"Risk Score\"]}/100</td>\n\n<th>Urgency</th>\n<td>${d.Urgency}</td>\n\n</tr>\n\n<tr>\n<th>MITRE Technique</th>\n<td colspan=\"3\">${d[\"MITRE Technique\"]}</td>\n</tr>\n\n</table>\n\n</div>\n\n<div class=\"section\">\n\n<h2>Risk Assessment</h2>\n\n<div class=\"score\">\n${d[\"Risk Score\"]}/100\n</div>\n\n<p>\nThis incident has been automatically classified as\n<strong>${d.Severity}</strong>\nbased on the submitted information.\n</p>\n\n</div>\n\n<div class=\"section\">\n\n<h2>Business Impact</h2>\n\n<div class=\"summary\">\n${d[\"Business Impact\"]}\n</div>\n\n</div>\n\n<div class=\"section\">\n\n<h2>Executive Summary</h2>\n\n<div class=\"summary\">\n\nA <strong>${d.Severity}</strong> severity\n<strong>${d[\"Incident Type\"]}</strong>\nhas been reported affecting the\n<strong>${d[\"Affected Asset\"]}</strong>.\n\nThe incident received a\n<strong>Risk Score of ${d[\"Risk Score\"]}/100</strong>\nand has been assigned a\n<strong>${d.Priority}</strong>\npriority for response.\n\nCurrent workflow status:\n<strong>${d.Status}</strong>.\n\nImmediate investigation and containment are recommended.\n\n</div>\n\n</div>\n\n<div class=\"footer\">\n\nGenerated automatically by the\n<b>Security Incident Response Assistant</b>\n\n<br><br>\n\nIncident ID:\n${d[\"Incident ID\"]}\n\n</div>\n\n</div>\n\n</body>\n\n</html>\n`;\n\nreturn [\n{\njson:{\n...d,\nhtml:html\n}\n}\n];"
+      },
+      "id": "5fc24bba-5aa2-42df-8dad-d77c623629b3",
+      "name": "Build HTML Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json['Email'] }}",
+        "subject": "=Security Incident Report - {{ $json[\"Company\"] }}",
+        "message": "={{ $json.html }}",
+        "options": {}
+      },
+      "id": "cafb4f2f-0cfd-4757-a723-a90c5af6a205",
+      "name": "Send Report Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1008,
+        0
+      ],
+      "webhookId": "cd69826f-057d-4194-9643-b1c5d618d89f",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "8WA9NpvUoTWmImQ4",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Form Trigger": {
+      "main": [
+        [
+          {
+            "node": "Validate & Enrich",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate & Enrich": {
+      "main": [
+        [
+          {
+            "node": "SOC Knowledge Base",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SOC Knowledge Base": {
+      "main": [
+        [
+          {
+            "node": "Log to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log to Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Build HTML Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build HTML Report": {
+      "main": [
+        [
+          {
+            "node": "Send Report Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Report Email": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "bf1401a3-138c-4569-97f4-3001a47b33fc",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "3943b8dda2573eb697ff0fb7b4eb05e8376834d3ce32042cf81c64705fb8d28d"
+  },
+  "nodeGroups": [],
+  "id": "1R9F0AVA4fdellNT",
+  "tags": [
+    {
+      "updatedAt": "2026-06-26T11:52:32.262Z",
+      "createdAt": "2026-06-26T11:52:32.262Z",
+      "id": "XHvYRWFGCLVPXmiC",
+      "name": "Incident Response"
+    },
+    {
+      "updatedAt": "2026-06-26T11:52:32.245Z",
+      "createdAt": "2026-06-26T11:52:32.245Z",
+      "id": "zi1iQrepLL5a40mO",
+      "name": "SOC"
+    }
+  ]
+}
